@@ -163,15 +163,6 @@ commands:
       - run:
           name: Show sccache
           command: sccache -s
-  find_dockerfile_changes:
-    steps:
-      - run:
-          name: Get the list of updated docker files
-          command: |
-            .circleci/get_pr_info.sh -b
-            eval `.circleci/get_pr_info.sh -b`
-            CHANGED_DOCKER_FILES=`cat "$CHANGED_FILE_OUTPUTFILE" | grep Dockerfile | tr '\n' ' '`
-            echo 'export CHANGED_DOCKER_FILES="'$CHANGED_DOCKER_FILES'"' >> $BASH_ENV
   fail_if_debian_buster_docker_base_images_are_not_tagged_with_sha256:
     steps:
       - run:
@@ -588,14 +579,13 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Check if the docker build job should run
-          command: .circleci/should_build_docker.sh
-      - find_dockerfile_changes
-      - run:
           name: Lint DockerFile changes
           command: |
-            echo changed docker files: $CHANGED_DOCKER_FILES
-            hadolint -c .lintrules/hadolint.yaml $CHANGED_DOCKER_FILES || true
+            eval `.circleci/get_pr_info.sh -b`
+            CHANGED_DOCKER_FILES=`cat "$CHANGED_FILE_OUTPUTFILE" | grep Dockerfile | tr '\n' ' '`
+            if [[ ! -z "$CHANGED_DOCKER_FILES" ]]; then
+              hadolint -c .lintrules/hadolint.yaml $CHANGED_DOCKER_FILES || true
+            fi
       - fail_if_debian_buster_docker_base_images_are_not_tagged_with_sha256
   check-breaking-change:
     executor: audit-executor
@@ -796,7 +786,7 @@ jobs:
   ######################################################################################################
   docker-pre-publish:
     executor: vm-2xlarge-executor
-    description: publish docker images
+    description: publish docker images with a pre-* tag.
     steps:
       - checkout
       - run:
@@ -835,7 +825,7 @@ jobs:
           name: pull pre images (or build if not pullable) and push release docker images
           command: |
             set -x
-            export BRANCH=${CIRCLE_BRANCH}
+            BRANCH=${CIRCLE_BRANCH}
             docker/build_push.sh -u -b ${BRANCH} -n client
             docker/build_push.sh -u -b ${BRANCH} -n init
             docker/build_push.sh -u -b ${BRANCH} -n mint
@@ -1028,6 +1018,11 @@ workflows:
       - docker-ci-build:
           target-image: arch
           filters: *filter-only-auto-canary
+      - docker-pre-publish:
+          context: docker
+          filters:
+            branches:
+              only: auto
 
   pull-request-workflow:
     jobs:
