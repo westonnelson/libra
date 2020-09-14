@@ -6,6 +6,7 @@ use libra_metrics::{
     register_histogram_vec, register_int_counter_vec, register_int_gauge_vec, Histogram,
     HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, OpMetrics,
 };
+use libra_types::PeerId;
 use netcore::transport::ConnectionOrigin;
 use once_cell::sync::Lazy;
 
@@ -45,6 +46,23 @@ pub fn connections(network_context: &NetworkContext, origin: ConnectionOrigin) -
         network_context.peer_id_short_str(),
         origin.as_str(),
     ])
+}
+
+pub static LIBRA_NETWORK_PEER_CONNECTED: Lazy<IntGaugeVec> = Lazy::new(|| {
+    register_int_gauge_vec!(
+        "libra_network_peer_connected",
+        "Indicates if we are connected to a particular peer",
+        &["peer_id"]
+    )
+    .unwrap()
+});
+
+pub fn peer_connected(network_context: &NetworkContext, peer_id: &PeerId, v: i64) {
+    if network_context.role().is_validator() {
+        LIBRA_NETWORK_PEER_CONNECTED
+            .with_label_values(&[&peer_id.short_str()])
+            .set(v)
+    }
 }
 
 pub static LIBRA_NETWORK_DISCOVERY_NOTES: Lazy<IntGaugeVec> = Lazy::new(|| {
